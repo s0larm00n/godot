@@ -42,6 +42,8 @@ bool TwoBoneIK3D::_set(const StringName &p_path, const Variant &p_value) {
 
 		if (what == "target_node") {
 			set_target_node(which, p_value);
+		} else if (what == "target_distance_limit") {
+			set_target_distance_limit(which, p_value);
 		} else if (what == "pole_node") {
 			set_pole_node(which, p_value);
 		} else if (what == "root_bone_name") {
@@ -90,6 +92,8 @@ bool TwoBoneIK3D::_get(const StringName &p_path, Variant &r_ret) const {
 
 		if (what == "target_node") {
 			r_ret = get_target_node(which);
+		} else if (what == "target_distance_limit") {
+			r_ret = get_target_distance_limit(which);
 		} else if (what == "pole_node") {
 			r_ret = get_pole_node(which);
 		} else if (what == "root_bone_name") {
@@ -149,6 +153,7 @@ void TwoBoneIK3D::_get_property_list(List<PropertyInfo> *p_list) const {
 		props.push_back(PropertyInfo(Variant::VECTOR3, path + "pole_direction_vector"));
 		props.push_back(PropertyInfo(Variant::STRING, path + "end_bone_name", PROPERTY_HINT_ENUM_SUGGESTION, enum_hint));
 		props.push_back(PropertyInfo(Variant::INT, path + "end_bone", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR));
+		props.push_back(PropertyInfo(Variant::FLOAT, path + "target_distance_limit", PROPERTY_HINT_RANGE, "0,10,0.00001,or_greater,suffix:m"));
 		props.push_back(PropertyInfo(Variant::BOOL, path + "use_virtual_end"));
 		props.push_back(PropertyInfo(Variant::BOOL, path + "extend_end_bone"));
 		props.push_back(PropertyInfo(Variant::INT, path + "end_bone/direction", PROPERTY_HINT_ENUM, SkeletonModifier3D::get_hint_bone_direction()));
@@ -209,6 +214,17 @@ PackedStringArray TwoBoneIK3D::get_configuration_warnings() const {
 }
 
 // Setting.
+
+void TwoBoneIK3D::set_target_distance_limit(int p_index, float p_distance) {
+	ERR_FAIL_INDEX(p_index, (int)settings.size());
+	this->tb_settings[p_index]->target_distance_limit = p_distance;
+	tb_settings[p_index]->simulation_dirty = true;
+}
+
+float TwoBoneIK3D::get_target_distance_limit(int p_index) const {
+	ERR_FAIL_INDEX_V(p_index, (int)settings.size(), 0);
+	return this->tb_settings[p_index]->target_distance_limit;
+}
 
 void TwoBoneIK3D::set_root_bone_name(int p_index, const String &p_bone_name) {
 	ERR_FAIL_INDEX(p_index, (int)settings.size());
@@ -477,6 +493,9 @@ bool TwoBoneIK3D::is_valid(int p_index) const {
 
 void TwoBoneIK3D::_bind_methods() {
 	// Setting.
+	ClassDB::bind_method(D_METHOD("set_target_distance_limit", "index", "distance"), &TwoBoneIK3D::set_target_distance_limit);
+	ClassDB::bind_method(D_METHOD("get_target_distance_limit", "index"), &TwoBoneIK3D::get_target_distance_limit);
+
 	ClassDB::bind_method(D_METHOD("set_target_node", "index", "target_node"), &TwoBoneIK3D::set_target_node);
 	ClassDB::bind_method(D_METHOD("get_target_node", "index"), &TwoBoneIK3D::get_target_node);
 	ClassDB::bind_method(D_METHOD("set_pole_node", "index", "pole_node"), &TwoBoneIK3D::set_pole_node);
@@ -780,8 +799,17 @@ void TwoBoneIK3D::_process_ik(Skeleton3D *p_skeleton, double p_delta) {
 void TwoBoneIK3D::_process_joints(double p_delta, Skeleton3D *p_skeleton, TwoBoneIK3DSetting *p_setting, const Vector3 &p_destination, const Vector3 &p_pole_destination) {
 	Vector3 destination = p_destination;
 
-	// Make vector from root to destination.
 	p_setting->root_pos = p_skeleton->get_bone_global_pose(p_setting->root_bone.bone).origin; // New root position.
+
+	// If root->distance distance limit is set, cull the distance to respect this setting.
+	if (p_setting->target_distance_limit > 0) {
+		float rawDistance = (destination - p_setting->root_pos).length();
+		if (rawDistance > p_setting->target_distance_limit) {
+			destination = p_setting->root_pos + (destination - p_setting->root_pos) * p_setting->target_distance_limit / rawDistance;
+		}
+	}
+
+	// Make vector from root to destination.
 	Vector3 root_to_destination = destination - p_setting->root_pos;
 	if (root_to_destination.is_zero_approx()) {
 		return; // Abort.

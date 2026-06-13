@@ -39,6 +39,8 @@ public:
 	struct TwoBoneIK3DSetting : public IKModifier3DSetting {
 		bool joints_dirty = false;
 
+		float target_distance_limit = 0;
+
 		BoneJoint root_bone;
 		BoneJoint middle_bone;
 		BoneJoint end_bone;
@@ -274,6 +276,10 @@ public:
 	}
 
 	// Setting.
+
+	void set_target_distance_limit(int p_index, float p_distance);
+	float get_target_distance_limit(int p_index) const;
+
 	void set_root_bone_name(int p_index, const String &p_bone_name);
 	String get_root_bone_name(int p_index) const;
 	void set_root_bone(int p_index, int p_bone);
